@@ -1,6 +1,9 @@
 # Clean Slate Forecast Pipeline
 
-This repository root contains a reproducible forecasting pipeline that does not read previous submission outputs. The minimal data-loading, scoring, and submission helpers live in `core.py`, so the clean slate pipeline no longer depends on the old experimental `src/hbac_forecast.py`.
+This folder contains the maintained forecasting pipeline and final-recipe
+rebuild code. The minimal data-loading, scoring, and submission helpers live in
+`core.py`, so the normal clean-slate model path no longer depends on the old
+experimental `src/hbac_forecast.py`.
 
 Data requirement:
 
@@ -12,6 +15,43 @@ dataset/sample_submission.csv
 ```
 
 Alternatively, pass another folder with the same two files via `--data-dir`.
+
+Final selected submissions:
+
+```powershell
+python run_pipeline.py `
+  --build-final-artifacts `
+  --rebuild-chronos-anchor `
+  --final-recipe both_final `
+  --output-dir outputs\clean_slate_final_recipes
+```
+
+This writes the two selected submissions:
+
+```text
+outputs/clean_slate_final_recipes/submission_private_skuratio_g120_h50_clip0p75_1p8.csv
+outputs/clean_slate_final_recipes/submission_breakthrough_k20_private_target150.csv
+```
+
+With `--build-final-artifacts --rebuild-chronos-anchor`, the pipeline first
+creates the intermediate artifacts under
+`outputs/clean_slate_final_recipes/artifacts/`:
+
+- rebuilds the public sliced anchor from the configured `current_best` and
+  direction source submissions using the active-mid-high uncertainty gate,
+  non-Sunday public horizons, lower-only direction, and 3% per-cell cap;
+- reruns Chronos-Bolt on the top active profit-weight SKUs to produce the
+  failed-direction probe;
+- builds the inverse-Chronos public k10.75 and k20 shapes;
+- trains the XGBVM evaluation shape from `train.csv`;
+- writes the private-source, baseline, and final selected submissions.
+
+No CSV values are embedded in the code. The public anchor step is deterministic
+and writes its own audit/metadata files. If the anchor has already been rebuilt,
+`--rebuild-chronos-anchor` can be omitted and `--chronos-anchor-source` can point
+to that file.
+
+`g120_h50` uses the generated k10.75 public block, generated XGBVM evaluation shape, and per-SKU historical ratio calibration. `k20_target150` uses the generated k20 public block, generated XGBVM evaluation shape, and scales the selected evaluation block to a 1.50 private/public weighted ratio.
 
 Source-only final command with risk-managed private calibration:
 

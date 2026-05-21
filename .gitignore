@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local environments
+.venv/
+venv/
+env/
+*.env
+
+# Local IDE / tooling state
+.vscode/
+.idea/
+.gitnexus/
+.npm-cache/
+
+# Competition data and generated artifacts
+dataset/
+outputs/
+scratch/
+external/
+M5-methods-master/
+
+# Large local reports / ad-hoc documents
+*.pdf
+
