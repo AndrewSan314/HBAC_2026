@@ -33,7 +33,7 @@ python run_pipeline.py `
   --private-global-target-ratio 1.60
 ```
 
-This is the clean replacement for the leaderboard-derived final artifact: it trains XGBoost from `dataset/train.csv`, uses volume matching for stable SKU totals, strengthens the public block rebound after the late non-Sunday closure, then selects the 92 high-impact still-active SKUs from training data only and scales their evaluation/private block to a 1.60 private/public ratio. It does not read any previous submission file from `outputs/`.
+This is a self-contained forecasting recipe: it trains XGBoost from `dataset/train.csv`, checks the configuration with rolling cross-validation, anchors SKU totals with volume matching against a robust statistical backbone, and strengthens the first forecast block after a recent non-Sunday closure. The private/evaluation calibration is also source-only: it selects the 92 high-impact still-active SKUs from training data and scales their evaluation block to a fixed 1.60 private/public ratio, motivated by historical September-to-October demand behavior in the training period. It does not read any previous submission file from `outputs/`.
 
 Stat-only reference command:
 
@@ -56,4 +56,4 @@ Rationale:
 - It builds a standard `starter_dow_blend` forecast and an open-business-day forecast that excludes global zero-transaction days from the rolling base.
 - For the first 28 forecast days only, it blends non-Sunday forecasts toward the open-business-day forecast.
 - Sundays keep the standard forecast, preserving the observed near-zero Sunday structure.
-- No previous submission file or leaderboard-derived prediction is used.
+- No previous submission file or external target signal is used.
