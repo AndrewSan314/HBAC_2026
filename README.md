@@ -2,6 +2,17 @@
 
 This repository root contains a reproducible forecasting pipeline that does not read previous submission outputs. The minimal data-loading, scoring, and submission helpers live in `core.py`, so the clean slate pipeline no longer depends on the old experimental `src/hbac_forecast.py`.
 
+Data requirement:
+
+This repository intentionally contains source code only. To reproduce a submission, place the competition data files at:
+
+```text
+dataset/train.csv
+dataset/sample_submission.csv
+```
+
+Alternatively, pass another folder with the same two files via `--data-dir`.
+
 Source-only final command with risk-managed private calibration:
 
 ```powershell
