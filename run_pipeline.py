@@ -8,36 +8,64 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-SRC_DIR = Path(__file__).resolve().parents[1]
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
-from hbac_forecast import (  # noqa: E402
-    BLOCK,
-    FOLD_STARTS,
-    HORIZON,
-    DatasetBundle,
-    apply_block_scales,
-    load_bundle,
-    profit_weights,
-    rmsse_scale,
-    wrmsse,
-    write_submission,
-)
-from clean_slate.features import (  # noqa: E402
-    attach_targets,
-    build_clean_feature_cache,
-    make_direct_feature_frame,
-    make_training_starts,
-    top_profit_indices,
-)
-from clean_slate.models import (  # noqa: E402
-    blend_top_sku_predictions,
-    fit_direct_xgb,
-    predict_direct_xgb,
-    closure_rebound_blend,
-    apply_volume_matching,
-)
+try:
+    from clean_slate.core import (  # noqa: E402
+        BLOCK,
+        FOLD_STARTS,
+        HORIZON,
+        DatasetBundle,
+        apply_block_scales,
+        load_bundle,
+        profit_weights,
+        rmsse_scale,
+        wrmsse,
+        write_submission,
+    )
+    from clean_slate.features import (  # noqa: E402
+        attach_targets,
+        build_clean_feature_cache,
+        make_direct_feature_frame,
+        make_training_starts,
+        top_profit_indices,
+    )
+    from clean_slate.models import (  # noqa: E402
+        blend_top_sku_predictions,
+        fit_direct_xgb,
+        predict_direct_xgb,
+        closure_rebound_blend,
+        apply_volume_matching,
+    )
+except ModuleNotFoundError:
+    from core import (  # type: ignore  # noqa: E402
+        BLOCK,
+        FOLD_STARTS,
+        HORIZON,
+        DatasetBundle,
+        apply_block_scales,
+        load_bundle,
+        profit_weights,
+        rmsse_scale,
+        wrmsse,
+        write_submission,
+    )
+    from features import (  # type: ignore  # noqa: E402
+        attach_targets,
+        build_clean_feature_cache,
+        make_direct_feature_frame,
+        make_training_starts,
+        top_profit_indices,
+    )
+    from models import (  # type: ignore  # noqa: E402
+        blend_top_sku_predictions,
+        fit_direct_xgb,
+        predict_direct_xgb,
+        closure_rebound_blend,
+        apply_volume_matching,
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -75,9 +103,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--private-calibration",
-        choices=["none", "sku_ratio"],
+        choices=["none", "sku_ratio", "global_ratio"],
         default="none",
-        help="Source-only evaluation block calibration computed from training history.",
+        help=(
+            "Source-only evaluation block calibration. sku_ratio uses historical SKU ratios; "
+            "global_ratio applies one private/public target ratio to the selected high-impact SKUs."
+        ),
     )
     parser.add_argument("--private-calibration-top-k", type=int, default=92)
     parser.add_argument("--private-calibration-pool-top-n", type=int, default=500)
@@ -88,6 +119,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--private-active-min-days", type=int, default=5)
     parser.add_argument("--private-global-prior", type=float, default=1.20)
+    parser.add_argument("--private-global-target-ratio", type=float, default=1.60)
     parser.add_argument("--private-hist-weight", type=float, default=0.50)
     parser.add_argument("--private-ratio-clip-low", type=float, default=0.75)
     parser.add_argument("--private-ratio-clip-high", type=float, default=1.80)
@@ -396,7 +428,7 @@ def apply_private_calibration(
     bundle: DatasetBundle,
     args: argparse.Namespace,
 ) -> tuple[np.ndarray, dict[str, object], pd.DataFrame]:
-    if args.private_calibration != "sku_ratio":
+    if args.private_calibration == "none":
         return pred, {"mode": "none"}, pd.DataFrame()
 
     years = parse_int_list(args.private_ratio_years)
@@ -405,13 +437,20 @@ def apply_private_calibration(
     selected, score = source_only_private_sku_mask(bundle, weights, args)
     ratio_table = historical_private_public_ratio_table(bundle, years)
 
-    hist = ratio_table["ratio_median"].to_numpy(dtype=np.float64)
-    hist = np.where(np.isfinite(hist), hist, args.private_global_prior)
-    hist = np.clip(hist, args.private_ratio_clip_low, args.private_ratio_clip_high)
-    target_ratio = np.exp(
-        (1.0 - args.private_hist_weight) * np.log(args.private_global_prior)
-        + args.private_hist_weight * np.log(hist)
-    )
+    if args.private_calibration == "global_ratio":
+        if args.private_global_target_ratio <= 0:
+            raise ValueError("--private-global-target-ratio must be positive")
+        target_ratio = np.full(len(bundle.sku_order), float(args.private_global_target_ratio), dtype=np.float64)
+    elif args.private_calibration == "sku_ratio":
+        hist = ratio_table["ratio_median"].to_numpy(dtype=np.float64)
+        hist = np.where(np.isfinite(hist), hist, args.private_global_prior)
+        hist = np.clip(hist, args.private_ratio_clip_low, args.private_ratio_clip_high)
+        target_ratio = np.exp(
+            (1.0 - args.private_hist_weight) * np.log(args.private_global_prior)
+            + args.private_hist_weight * np.log(hist)
+        )
+    else:
+        raise ValueError(f"Unsupported private calibration mode: {args.private_calibration}")
     target_ratio = np.where(selected, target_ratio, 1.0)
 
     out = pred.astype(np.float64, copy=True)
@@ -440,16 +479,12 @@ def apply_private_calibration(
     eval_before_weighted = weighted_block_sum(eval_before, weights, selected)
     eval_after_weighted = weighted_block_sum(out[BLOCK:], weights, selected)
     diagnostics = {
-        "mode": "sku_ratio",
+        "mode": args.private_calibration,
         "selected_count": int(selected.sum()),
         "pool_top_n": int(args.private_calibration_pool_top_n),
         "score": args.private_calibration_score,
         "active_min_days": int(args.private_active_min_days),
         "years": years,
-        "global_prior": float(args.private_global_prior),
-        "hist_weight": float(args.private_hist_weight),
-        "clip_low": float(args.private_ratio_clip_low),
-        "clip_high": float(args.private_ratio_clip_high),
         "selected_weight_share": float(weights[selected].sum()),
         "selected_public_weighted_sum": public_weighted,
         "selected_eval_weighted_sum_before": eval_before_weighted,
@@ -458,6 +493,13 @@ def apply_private_calibration(
         "evaluation_total_sum_before": float(eval_before.sum()),
         "evaluation_total_sum_after": float(out[BLOCK:].sum()),
     }
+    if args.private_calibration == "global_ratio":
+        diagnostics["global_target_ratio"] = float(args.private_global_target_ratio)
+    if args.private_calibration == "sku_ratio":
+        diagnostics["global_prior"] = float(args.private_global_prior)
+        diagnostics["hist_weight"] = float(args.private_hist_weight)
+        diagnostics["clip_low"] = float(args.private_ratio_clip_low)
+        diagnostics["clip_high"] = float(args.private_ratio_clip_high)
 
     audit = ratio_table.copy()
     audit["selected_private_calibration"] = selected

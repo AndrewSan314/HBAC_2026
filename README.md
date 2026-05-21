@@ -1,13 +1,13 @@
 # Clean Slate Forecast Pipeline
 
-This folder contains a reproducible forecasting pipeline that does not read previous submission outputs.
+This repository root contains a reproducible forecasting pipeline that does not read previous submission outputs. The minimal data-loading, scoring, and submission helpers live in `core.py`, so the clean slate pipeline no longer depends on the old experimental `src/hbac_forecast.py`.
 
-Source-only breakthrough command with private calibration:
+Source-only final command with risk-managed private calibration:
 
 ```powershell
 python run_pipeline.py `
-  --output-dir outputs\clean_slate_source_only_breakthrough `
-  --submission-name submission_clean_slate_source_only_breakthrough.csv `
+  --output-dir outputs\clean_slate_source_only_global160 `
+  --submission-name submission_clean_slate_source_only_global160.csv `
   --objective tweedie `
   --volume-matching `
   --closure-rebound-strength 0.811 `
@@ -25,18 +25,15 @@ python run_pipeline.py `
   --recency-halflife 365 `
   --n-estimators 260 `
   --learning-rate 0.035 `
-  --private-calibration sku_ratio `
+  --private-calibration global_ratio `
   --private-calibration-pool-top-n 500 `
   --private-calibration-top-k 92 `
   --private-calibration-score active_weight `
   --private-active-min-days 5 `
-  --private-global-prior 1.20 `
-  --private-hist-weight 0.50 `
-  --private-ratio-clip-low 0.75 `
-  --private-ratio-clip-high 1.80
+  --private-global-target-ratio 1.60
 ```
 
-This is the clean replacement for the leaderboard-derived final artifact: it trains XGBoost from `dataset/train.csv`, uses volume matching for stable SKU totals, strengthens the public block rebound after the late non-Sunday closure, then calibrates the private/evaluation block from historical October-over-September SKU ratios. It does not read any previous submission file from `outputs/`.
+This is the clean replacement for the leaderboard-derived final artifact: it trains XGBoost from `dataset/train.csv`, uses volume matching for stable SKU totals, strengthens the public block rebound after the late non-Sunday closure, then selects the 92 high-impact still-active SKUs from training data only and scales their evaluation/private block to a 1.60 private/public ratio. It does not read any previous submission file from `outputs/`.
 
 Stat-only reference command:
 

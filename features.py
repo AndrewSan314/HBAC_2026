@@ -5,7 +5,10 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from hbac_forecast import DatasetBundle, parse_number
+try:
+    from clean_slate.core import DatasetBundle, parse_number
+except ModuleNotFoundError:
+    from core import DatasetBundle, parse_number
 
 
 # ═══════════════════════════════════════════

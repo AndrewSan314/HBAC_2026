@@ -6,7 +6,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .features import FEATURE_HORIZON, feature_columns
+try:
+    from .features import FEATURE_HORIZON, feature_columns
+except ImportError:
+    from features import FEATURE_HORIZON, feature_columns
 
 
 @dataclass(frozen=True)
